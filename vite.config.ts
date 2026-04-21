@@ -2,6 +2,8 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA, type ManifestOptions } from "vite-plugin-pwa";
 
+
+
 const manifest: Partial<ManifestOptions> = {
   theme_color: "#ffd438",
   background_color: "#2EC6FE",

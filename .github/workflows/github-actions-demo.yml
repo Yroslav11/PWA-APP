@@ -1,33 +1,84 @@
-name: Node.js Package
+name: CI/CD Pipeline
 
 on:
+  push:
+    branches: [main, develop, 'release/**']
+  pull_request:
+    branches: [main]
   release:
-    types: [created]
+    types: [created, published]
+
+env:
+  NODE_VERSION: 20
 
 jobs:
-  test:
+  # ====================== JOB 1: Линтинг ======================
+  lint:
+    name: 🔍 Lint & Format
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ env.NODE_VERSION }}
       - run: npm ci
-      - run: npm test
+      - name: Run ESLint
+        run: npm run lint
 
-  publish-gpr:
+  # ====================== JOB 2: Тестирование ======================
+  test:
+    name: 🧪 Vitest Tests
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm ci
+      - name: Run tests
+        run: npm test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 7
+
+  # ====================== JOB 3: Сборка ======================
+  build:
+    name: 📦 Build Vite App
     needs: test
     runs-on: ubuntu-latest
-    permissions:
-      packages: write
-      contents: read
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-          registry-url: https://npm.pkg.github.com/
+          node-version: ${{ env.NODE_VERSION }}
       - run: npm ci
-      - run: npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Type check
+        run: npm run build  # tsc -b уже внутри
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+
+  # ====================== JOB 4: Деплой на GitHub Pages (опционально) ======================
+  deploy:
+    name: 🚀 Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm ci
+      - run: npm run build
+      - name: Deploy
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
